@@ -27,6 +27,9 @@ var program = require('commander');
 var cheerio = require('cheerio');
 var HTMLFILE_DEFAULT = "index.html";
 var CHECKSFILE_DEFAULT = "checks.json";
+var GRADER_TMP_FILE = "grader_tmp.html";
+var rest = require('restler');
+var urlDefined = false;
 
 var assertFileExists = function(infile)
 {
@@ -61,12 +64,25 @@ var checkHtmlFile = function(htmlfile, checksfile)
     return out;
 };
 
+var setUrlDefined = function(inurl)
+{
+    urlDefined = true;
+    return inurl;
+}
+
 var clone = function(fn)
 {
     // Workaround for commander.js issue.
     // http://stackoverflow.com/a/6772648
     return fn.bind({});
 };
+
+var performChecks = function(file, checks)
+{
+    var checkJson = checkHtmlFile(file, checks);
+    var outJson = JSON.stringify(checkJson, null, 4);
+    console.log(outJson);
+}
 
 if (require.main == module)
 {
@@ -75,11 +91,30 @@ if (require.main == module)
             clone(assertFileExists), CHECKSFILE_DEFAULT)
         .option('-f, --file <html_file>', 'Path to index.html', 
             clone(assertFileExists), HTMLFILE_DEFAULT)
+        .option('-u, --url <url>', 'URL to web page',
+            clone(setUrlDefined))
         .parse(process.argv);
 
-     var checkJson = checkHtmlFile(program.file, program.checks);
-     var outJson = JSON.stringify(checkJson, null, 4);
-     console.log(outJson);
+     if (urlDefined)
+     {
+         rest.get(program.url).on('complete', function(result) {
+             if (result instanceof Error)
+             {
+                 console.log("Cannot download url: %s\nExiting.", inurl);
+                 process.exit(1);
+             }
+             else
+             {
+                 console.log("Storing url to temporary file %s", GRADER_TMP_FILE);
+                 fs.writeFileSync(GRADER_TMP_FILE, result);
+                 performChecks(GRADER_TMP_FILE, program.checks);
+             }
+         });
+     }
+     else
+     {
+         performChecks(program.file, program.checks);
+     }
 } else
 {
     exports.checkHtmlFile = checkHtmlFile;
